@@ -2,12 +2,38 @@
 
 # Flags
 tld=""
-version="0.0.1"
+version="0.0.2"
 command="caa-incident-check"
+database="serials.db"
+archive="caa-rechecking-incident-affected-serials.txt.gz"
+database_source="https://d4twhgtvn0ff5.cloudfront.net/$archive"
 args=()
 
 # Functions
 function execute() {
+
+  if [ ! -e "serials.db" ]; then
+    if [ "$EUID" -ne 0 ]; then
+      wget -q $database_source
+      if [ ! -s $archive ]; then
+        echo "Database fetch failed. Resource may be unavailable or you are missing proper permissions."
+        exit
+      fi
+      gunzip -c $archive > $database && rm $archive
+    else
+      sudo wget -q $database_source
+      if [ ! -s $archive ]; then
+        echo "Database fetch failed. Resource may be unavailable or you are missing proper permissions."
+        exit
+      fi
+      sudo gunzip -c $archive > $database && sudo rm $archive
+    fi
+  fi
+
+  if [ ! -s $database ]; then
+    echo "Database is empty. Please delete '$database' and try again."
+    exit
+  fi
 
   if [ -z $args ]; then
     echo "Please provide a valid domain to check for."
@@ -22,9 +48,9 @@ function execute() {
   fi
 
   if [ $regtld ]; then
-    output=`grep -o -P "([\.a-zA-Z0-9_-]*$domain($regtld)+).*(at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:\.]+ [\+0-9A-Z ]*)" serials.txt | grep -o -P "([\.a-zA-Z0-9_-]*$domain($regtld)+)|(at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:\.]+ [\+0-9A-Z ]*)"`
+    output=`grep -o -P "([\.a-zA-Z0-9_-]*$domain($regtld)+).*(at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:\.]+ [\+0-9A-Z ]*)" $database | grep -o -P "([\.a-zA-Z0-9_-]*$domain($regtld)+)|(at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:\.]+ [\+0-9A-Z ]*)"`
   else
-    output=`grep -o -P "([\.a-zA-Z0-9_-]*$domain[\.a-zA-Z0-9_-]*).*(at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:\.]+ [\+0-9A-Z ]*)" serials.txt | grep -o -P "([\.a-zA-Z0-9_-]*$domain[\.a-zA-Z0-9_-]*)|(at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:\.]+ [\+0-9A-Z ]*)"`
+    output=`grep -o -P "([\.a-zA-Z0-9_-]*$domain[\.a-zA-Z0-9_-]*).*(at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:\.]+ [\+0-9A-Z ]*)" $database | grep -o -P "([\.a-zA-Z0-9_-]*$domain[\.a-zA-Z0-9_-]*)|(at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:\.]+ [\+0-9A-Z ]*)"`
   fi
 
   if [ ${#output[@]} -gt 0 ] && [ -n "${output//[$'\t\r\n ']}" ]; then
